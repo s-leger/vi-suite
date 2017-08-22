@@ -30,8 +30,8 @@ from time import sleep
 from .livi_export import radgexport, spfc, createoconv, createradfile
 from .livi_calc  import li_calc
 from .vi_display import li_display, linumdisplay, spnumdisplay, en_air, wr_legend, wr_disp, wr_scatter, wr_table, ss_disp, ss_legend, svf_disp, svf_legend, basic_legend, basic_table, basic_disp, ss_scatter, en_disp, en_pdisp, en_scatter, en_table, en_barchart, comp_table, comp_disp, leed_scatter, cbdm_disp, cbdm_scatter, envals, bsdf, bsdf_disp#, en_barchart, li3D_legend
-from .envi_export import enpolymatexport, pregeo
-from .envi_mat import envi_materials, envi_constructions
+
+from .envi_mat import envi_materials, envi_constructions, pregeo, enpolymatexport
 from .vi_func import selobj, livisimacc, solarPosition, wr_axes, clearscene, clearfiles, viparams, objmode, nodecolour, cmap, wind_rose, compass, windnum
 from .vi_func import fvcdwrite, fvbmwrite, fvblbmgen, fvvarwrite, fvsolwrite, fvschwrite, fvtppwrite, fvraswrite, fvshmwrite, fvmqwrite, fvsfewrite, fvobjwrite, sunposenvi, clearlayers
 from .vi_func import retobjs, rettree, retpmap, progressbar, spathrange, objoin, progressfile, chunks, xy2radial, logentry, sunpath, radpoints
@@ -52,12 +52,15 @@ except Exception as e:
 envi_mats = envi_materials()
 envi_cons = envi_constructions()
 
-rvuerrdict = {'view up parallel to view direction': "Camera cannot point directly upwards", 'x11': "No X11 display server found. You may need to install XQuartz", 'source center': "A light source has concave faces. Use mesh - cleanup - split concave faces"}
+rvuerrdict = {'view up parallel to view direction': "Camera cannot point directly upwards", 
+    'x11': "No X11 display server found. You may need to install XQuartz", 
+    'source center': "A light source has concave faces. Use mesh - cleanup - split concave faces"}
+    
 pmerrdict = {'fatal - too many prepasses, no global photons stored\n': "Too many prepasses have ocurred. Make sure light sources can see your geometry",
-                'fatal - too many prepasses, no global photons stored, no caustic photons stored\n': "Too many prepasses have ocurred. Turn off caustic photons and encompass the scene",
-               'fatal - zero flux from light sources\n': "No light flux, make sure there is a light source and that photon port normals point inwards",
-               'fatal - no light sources in distribPhotons\n': "No light sources. Photon mapping does not work with HDR skies",
-               'fatal - no valid photon ports found\n': 'Make sure photon ports are valid', 'fatal - failed photon distribution\n': 'Do the lights see enough geometry?'}
+    'fatal - too many prepasses, no global photons stored, no caustic photons stored\n': "Too many prepasses have ocurred. Turn off caustic photons and encompass the scene",
+    'fatal - zero flux from light sources\n': "No light flux, make sure there is a light source and that photon port normals point inwards",
+    'fatal - no light sources in distribPhotons\n': "No light sources. Photon mapping does not work with HDR skies",
+    'fatal - no valid photon ports found\n': 'Make sure photon ports are valid', 'fatal - failed photon distribution\n': 'Do the lights see enough geometry?'}
 
 class NODE_OT_LiGExport(bpy.types.Operator):
     bl_idname = "node.ligexport"
@@ -1264,7 +1267,7 @@ class NODE_OT_EnGExport(bpy.types.Operator):
         scene['viparams']['vidisp'] = ''
         node = bpy.data.node_groups[self.nodeid.split('@')[1]].nodes[self.nodeid.split('@')[0]]
         node.preexport(scene)
-        pregeo(self)
+        pregeo(context, self)
         node.postexport()
         return {'FINISHED'}
 
@@ -1296,11 +1299,11 @@ class NODE_OT_EnExport(bpy.types.Operator, io_utils.ExportHelper):
         scene.frame_set(node.fs)
         shutil.copyfile(os.path.join(os.path.dirname(os.path.abspath(os.path.realpath( __file__ ))), "EPFiles", "Energy+.idd"), os.path.join(scene['viparams']['newdir'], "Energy+.idd"))
 
-        if bpy.context.active_object and not bpy.context.active_object.hide:
-            if bpy.context.active_object.type == 'MESH':
+        if context.active_object and not context.active_object.hide:
+            if context.active_object.type == 'MESH':
                 bpy.ops.object.mode_set(mode = 'OBJECT')
 
-        enpolymatexport(self, node, locnode, envi_mats, envi_cons)
+        enpolymatexport(context, self, node, locnode, envi_mats, envi_cons)
         node.bl_label = node.bl_label[1:] if node.bl_label[0] == '*' else node.bl_label
         node.exported, node.outputs['Context out'].hide = True, False
         node.postexport()

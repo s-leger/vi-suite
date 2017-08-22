@@ -1773,33 +1773,32 @@ def rtupdate(self, context):
         return []
                
 def iprop(iname, idesc, imin, imax, idef):
-    return(IntProperty(name = iname, description = idesc, min = imin, max = imax, default = idef))
+    return(IntProperty(name=iname, description=idesc, min=imin, max=imax, default=idef))
 def eprop(eitems, ename, edesc, edef):
-    return(EnumProperty(items=eitems, name = ename, description = edesc, default = edef))
+    return(EnumProperty(items=eitems, name=ename, description=edesc, default=edef))
 def bprop(bname, bdesc, bdef):
-    return(BoolProperty(name = bname, description = bdesc, default = bdef))
+    return(BoolProperty(name=bname, description=bdesc, default=bdef))
 def sprop(sname, sdesc, smaxlen, sdef):
-    return(StringProperty(name = sname, description = sdesc, maxlen = smaxlen, default = sdef))
+    return(StringProperty(name=sname, description=sdesc, maxlen=smaxlen, default=sdef))
 def fprop(fname, fdesc, fmin, fmax, fdef):
-    return(FloatProperty(name = fname, description = fdesc, min = fmin, max = fmax, default = fdef))
+    return(FloatProperty(name=fname, description=fdesc, min=fmin, max=fmax, default=fdef))
 def fvprop(fvsize, fvname, fvattr, fvdef, fvsub, fvmin, fvmax):
-    return(FloatVectorProperty(size = fvsize, name = fvname, attr = fvattr, default = fvdef, subtype =fvsub, min = fvmin, max = fvmax))
+    return(FloatVectorProperty(size=fvsize, name=fvname, attr=fvattr, default=fvdef, subtype=fvsub, min=fvmin, max=fvmax))
 def niprop(iname, idesc, imin, imax, idef):
-        return(IntProperty(name = iname, description = idesc, min = imin, max = imax, default = idef, update = nodeexported))
+        return(IntProperty(name=iname, description=idesc, min=imin, max=imax, default=idef, update=nodeexported))
 def neprop(eitems, ename, edesc, edef):
-    return(EnumProperty(items=eitems, name = ename, description = edesc, default = edef, update = nodeexported))
+    return(EnumProperty(items=eitems, name=ename, description=edesc, default=edef, update=nodeexported))
 def nbprop(bname, bdesc, bdef):
-    return(BoolProperty(name = bname, description = bdesc, default = bdef, update = nodeexported))
+    return(BoolProperty(name=bname, description=bdesc, default=bdef, update=nodeexported))
 def nsprop(sname, sdesc, smaxlen, sdef):
-    return(StringProperty(name = sname, description = sdesc, maxlen = smaxlen, default = sdef, update = nodeexported))
+    return(StringProperty(name=sname, description=sdesc, maxlen=smaxlen, default=sdef, update=nodeexported))
 def nfprop(fname, fdesc, fmin, fmax, fdef):
-    return(FloatProperty(name = fname, description = fdesc, min = fmin, max = fmax, default = fdef, update = nodeexported))
+    return(FloatProperty(name=fname, description=fdesc, min=fmin, max=fmax, default=fdef, update=nodeexported))
 def nfvprop(fvname, fvattr, fvdef, fvsub):
-    return(FloatVectorProperty(name=fvname, attr = fvattr, default = fvdef, subtype = fvsub, update = nodeexported))
+    return(FloatVectorProperty(name=fvname, attr=fvattr, default=fvdef, subtype=fvsub, update=nodeexported))
 
-def boundpoly(obj, mat, poly, enng):
-    mat = obj.data.materials[poly.material_index]
-    if mat.envi_boundary:
+def boundpoly(obj, mat, md, poly, enng):
+    if md.boundary:
         nodes = [node for node in enng.nodes if hasattr(node, 'zone') and node.zone == obj.name]
         for node in nodes:
             insock = node.inputs['{}_{}_b'.format(mat.name, poly.index)]
@@ -1818,7 +1817,7 @@ def boundpoly(obj, mat, poly, enng):
             else:
                 return(("Adiabatic", "", "NoSun", "NoWind"))
 
-    elif mat.envi_thermalmass:
+    elif md.thermalmass:
         return(("Adiabatic", "", "NoSun", "NoWind"))
     elif poly.calc_center_bounds()[2] <= 0:
         return(("Ground", '{}_{}'.format(obj.name, poly.index), "NoSun", "NoWind"))
@@ -1828,17 +1827,19 @@ def boundpoly(obj, mat, poly, enng):
 def objvol(op, obj):
     bm , floor, roof, mesh = bmesh.new(), [], [], obj.data
 #    btemp = bpy.data.meshes.new("temp")
-    tempmesh = obj.to_mesh(scene = bpy.context.scene, apply_modifiers = True, settings = 'PREVIEW')
+    tempmesh = obj.to_mesh(scene=bpy.context.scene, apply_modifiers=True, settings='PREVIEW')
     bm.from_mesh(tempmesh)
     bpy.data.meshes.remove(tempmesh)
 #    bm.transform(obj.matrix_world)
 #    bm.from_object(obj, bpy.context.scene)
 #    bm.transform(obj.matrix_world)
     for f in mesh.polygons:
-        if obj.data.materials[f.material_index].envi_con_type == 'Floor':
-            floor.append((facearea(obj, f), (obj.matrix_world*mathutils.Vector(f.center))[2]))
-        elif obj.data.materials[f.material_index].envi_con_type == 'Roof':
-            roof.append((facearea(obj, f), (obj.matrix_world*mathutils.Vector(f.center))[2]))
+        mat = obj.data.materials[f.material_index]
+        if len(mat.visuite_envi) > 0:
+            if mat.visuite_envi[0].con_type == 'Floor':
+                floor.append((facearea(obj, f), (obj.matrix_world * mathutils.Vector(f.center))[2]))
+            elif mat.visuite_envi[0].con_type == 'Roof':
+                roof.append((facearea(obj, f), (obj.matrix_world * mathutils.Vector(f.center))[2]))
     zfloor = list(zip(*floor))
     
     if not zfloor and op:
@@ -1853,9 +1854,20 @@ def ceilheight(obj, vertz):
     for vert in mesh.vertices:
         vertz.append((obj.matrix_world * vert.co)[2])
     zmax, zmin = max(vertz), min(vertz)
-    ceiling = [max((obj.matrix_world * mesh.vertices[poly.vertices[0]].co)[2], (obj.matrix_world * mesh.vertices[poly.vertices[1]].co)[2], (obj.matrix_world * mesh.vertices[poly.vertices[2]].co)[2]) for poly in mesh.polygons if max((obj.matrix_world * mesh.vertices[poly.vertices[0]].co)[2], (obj.matrix_world * mesh.vertices[poly.vertices[1]].co)[2], (obj.matrix_world * mesh.vertices[poly.vertices[2]].co)[2]) > 0.9 * zmax]
-    floor = [min((obj.matrix_world * mesh.vertices[poly.vertices[0]].co)[2], (obj.matrix_world * mesh.vertices[poly.vertices[1]].co)[2], (obj.matrix_world * mesh.vertices[poly.vertices[2]].co)[2]) for poly in mesh.polygons if min((obj.matrix_world * mesh.vertices[poly.vertices[0]].co)[2], (obj.matrix_world * mesh.vertices[poly.vertices[1]].co)[2], (obj.matrix_world * mesh.vertices[poly.vertices[2]].co)[2]) < zmin + 0.1 * (zmax - zmin)]
-    return(sum(ceiling)/len(ceiling)-sum(floor)/len(floor))
+    wM = obj.matrix_world
+    ceiling = [max((wM * mesh.vertices[poly.vertices[0]].co)[2], 
+                    (wM * mesh.vertices[poly.vertices[1]].co)[2], 
+                    (wM * mesh.vertices[poly.vertices[2]].co)[2]) 
+                    for poly in mesh.polygons if max((wM * mesh.vertices[poly.vertices[0]].co)[2], 
+                                                     (wM * mesh.vertices[poly.vertices[1]].co)[2], 
+                                                     (wM * mesh.vertices[poly.vertices[2]].co)[2]) > 0.9 * zmax]
+    floor = [min((wM * mesh.vertices[poly.vertices[0]].co)[2], 
+                (wM * mesh.vertices[poly.vertices[1]].co)[2], 
+                (wM * mesh.vertices[poly.vertices[2]].co)[2]) 
+                for poly in mesh.polygons if min((wM * mesh.vertices[poly.vertices[0]].co)[2], 
+                                                     (wM * mesh.vertices[poly.vertices[1]].co)[2], 
+                                                     (wM * mesh.vertices[poly.vertices[2]].co)[2]) < zmin + 0.1 * (zmax - zmin)]
+    return(sum(ceiling) / len(ceiling) - sum(floor) / len(floor))
 
 def vertarea(mesh, vert):
     area = 0
@@ -1888,8 +1900,8 @@ def vertarea(mesh, vert):
     return area       
 
 def facearea(obj, face):
-    omw = obj.matrix_world
-    vs = [omw*mathutils.Vector(face.center)] + [omw*obj.data.vertices[v].co for v in face.vertices] + [omw*obj.data.vertices[face.vertices[0]].co]
+    wM = obj.matrix_world
+    vs = [wM * mathutils.Vector(face.center)] + [wM * obj.data.vertices[v].co for v in face.vertices] + [wM * obj.data.vertices[face.vertices[0]].co]
     return(vsarea(obj, vs))
 
 def vsarea(obj, vs):
@@ -1918,8 +1930,8 @@ def wind_rose(maxws, wrsvg, wrtype):
     dimen = [eval(path.getAttribute('height').strip('pt')) for path in svg.getElementsByTagName('svg')][0]
     scale = 0.04 * dimen
     svg.unlink()    
-    sposnew = [[(eval(ss.split()[ss.index('M') + 1]) - dimen/2) * 0.1, (eval(ss.split()[ss.index('M') + 2]) - dimen/2) * -0.1, 0.05] for ss in pos_strings]
-    lposnew = [[[(eval(ss.split()[li + 1]) - dimen/2) * 0.1, (eval(ss.split()[li + 2]) - dimen/2) * -0.1, 0.05] for li in [si for si, s in enumerate(ss.split()) if s == 'L']] for ss in pos_strings]
+    sposnew = [[(eval(ss.split()[ss.index('M') + 1]) - dimen / 2) * 0.1, (eval(ss.split()[ss.index('M') + 2]) - dimen / 2) * -0.1, 0.05] for ss in pos_strings]
+    lposnew = [[[(eval(ss.split()[li + 1]) - dimen / 2) * 0.1, (eval(ss.split()[li + 2]) - dimen / 2) * -0.1, 0.05] for li in [si for si, s in enumerate(ss.split()) if s == 'L']] for ss in pos_strings]
 
     for stsi, sts in enumerate(style_strings):        
         if 'fill:#' in sts[0] and sts[0][-6:] != 'ffffff':
@@ -1957,7 +1969,7 @@ def wind_rose(maxws, wrsvg, wrtype):
             
     if wrtype in ('0', '1', '3', '4'):            
         thick = scale * 0.005 if wrtype == '4' else scale * 0.0005
-        faces = bmesh.ops.inset_individual(bm, faces=bm.faces, thickness = thick, use_even_offset = True)['faces']
+        faces = bmesh.ops.inset_individual(bm, faces=bm.faces, thickness=thick, use_even_offset=True)['faces']
         
         if wrtype == '4':
             [bm.faces.remove(f) for f in bm.faces if f not in faces]
@@ -1970,7 +1982,7 @@ def wind_rose(maxws, wrsvg, wrtype):
     bm.to_mesh(wro.data)
     bm.free()
 
-    bpy.ops.mesh.primitive_circle_add(vertices = 132, fill_type='NGON', radius=scale*1.2, view_align=False, enter_editmode=False, location=(0, 0, -0.01))
+    bpy.ops.mesh.primitive_circle_add(vertices=132, fill_type='NGON', radius=scale * 1.2, view_align=False, enter_editmode=False, location=(0, 0, -0.01))
     wrbo = bpy.context.active_object
     
     if 'wr-base'not in [mat.name for mat in bpy.data.materials]:

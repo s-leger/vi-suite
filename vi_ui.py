@@ -19,7 +19,7 @@ class Vi3DPanel(bpy.types.Panel):
         layout = self.layout
 
         try:
-            if cao and cao.active_material.get('bsdf') and cao.active_material['bsdf']['type'] == ' ' and cao.vi_type == '5':
+            if cao and cao.active_material.get('bsdf') and cao.active_material['bsdf']['type'] == ' ' and cao.visuite_type == '5':
                 if scene['viparams']['vidisp'] != 'bsdf_panel':
                     row = layout.row()
                     row.operator("view3d.bsdf_display", text="BSDF Display") 
@@ -232,6 +232,8 @@ class VIMatPanel(bpy.types.Panel):
         return context.material
 
     def draw(self, context):
+        return
+        """
         cm, scene = context.material, context.scene
         layout = self.layout
         newrow(layout, 'Material type', cm, "mattype")
@@ -429,7 +431,7 @@ class VIMatPanel(bpy.types.Panel):
                             row.prop(cm, thicklist[l])
                             row.label(text = "default: {}mm".format(envi_mats.matdat[layername][7]))
         
-        elif cm.mattype == '1':  
+        if cm.mattype == '1':  
             if scene.get('viparams') and scene['viparams'].get('viexpcontext') and scene['viparams']['viexpcontext'] == 'LiVi Compliance':
                 connode = bpy.data.node_groups[scene['viparams']['connode'].split('@')[1]].nodes[scene['viparams']['connode'].split('@')[0]]
                 coptions = connode['Options']
@@ -444,7 +446,7 @@ class VIMatPanel(bpy.types.Panel):
                             row.prop(cm, 'gl_roof')
                     elif coptions['bambuild'] == '4':
                         newrow(layout, "Space type:", cm, 'respacemenu')
-                elif coptions['canalysis'] == '1':
+                        elif coptions['canalysis'] == '1':
                     newrow(layout, "Space type:", cm, 'crspacemenu')
                 elif coptions['canalysis'] == '2':
                     if coptions['bambuild'] == '2':
@@ -530,12 +532,14 @@ class VIMatPanel(bpy.types.Panel):
                     elif fvsimnode.turbulence == 'kOmega':
                         newrow(layout, "k type:", cm, "flovi_bmok_type")
                         newrow(layout, "Omega type:", cm, "flovi_bmoo_type")
-                
+        """
+        
+        
 class VIObPanel(bpy.types.Panel):
     bl_label = "VI-Suite Object Definition"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "data"
+    bl_context = "object"
 
     @classmethod
     def poll(cls, context):
@@ -545,19 +549,19 @@ class VIObPanel(bpy.types.Panel):
     def draw(self, context):
         obj = context.active_object
         layout = self.layout
-
+        """
         if obj.type == 'MESH':
             row = layout.row()
-            row.prop(obj, "vi_type")
-            if obj.vi_type == '1':
+            row.prop(obj, "visuite_type")
+            if obj.visuite_type == '1':
+                d = obj.visuite_envi[0]
                 row = layout.row()
-                row.prop(obj, "envi_type")
-                if obj.envi_type == '0':
-                    newrow(layout, 'Inside convection:', obj, "envi_ica")
-                    newrow(layout, 'Outside convection:', obj, "envi_oca")
-                    
-
-        if (obj.type == 'LAMP' and obj.data.type != 'SUN') or obj.vi_type == '4':
+                row.prop(d, "type")
+                if d.type == '0':
+                    newrow(layout, 'Inside convection:', d, "ica")
+                    newrow(layout, 'Outside convection:', d, "oca")
+        """            
+        if (obj.type == 'LAMP' and obj.data.type != 'SUN') or obj.visuite_type == '4':
             row = layout.row()
             row.operator("livi.ies_select")
             row.prop(obj, "ies_name")
@@ -569,7 +573,7 @@ class VIObPanel(bpy.types.Panel):
             else:
                 newrow(layout, 'IES Temperature:', obj, "ies_ct")
 
-        elif obj.vi_type == '5':                
+        elif obj.visuite_type == '5':                
             newrow(layout, 'Direction:', obj, 'li_bsdf_direc')
             newrow(layout, 'Klems/Tensor:', obj, 'li_bsdf_tensor')
             if obj.li_bsdf_tensor != ' ':

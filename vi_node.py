@@ -1210,7 +1210,10 @@ class ViEnInNode(bpy.types.Node, ViNodes):
             row.label('Connect Location node')
 
     def update(self):
-        socklink(self.outputs['Context out'], self['nodeid'].split('@')[1])
+        try:
+            socklink(self.outputs['Context out'], self['nodeid'].split('@')[1])
+        except:
+            pass
         if not self.inputs['Location in'].links:
             nodecolour(self, 1)
 
@@ -2695,12 +2698,23 @@ class EnViZone(bpy.types.Node, EnViNodes):
         obj = bpy.data.objects[self.zone]
         odm = obj.data.materials
 #        self.zonevolume = objvol('', obj)
-        bfacelist = sorted([face for face in obj.data.polygons if odm[face.material_index].envi_boundary == 1], key=lambda face: -face.center[2])
-        buvals = [retuval(odm[face.material_index]) for face in bfacelist]
+        faces = []
+        for face in obj.data.polygons:
+            md = odm[face.material_index].visuite_envi
+            d = None
+            if len(md) > 0:
+                d = md[0]
+            faces.append((face, d))
+            
+        bfacelist = sorted([face for face, d in faces if d and d.boundary == 1], key=lambda face: -face.center[2])
+        
+        buvals = [retuval(odm[face.material_index].visuite_envi[0], context) for face in bfacelist]
         bsocklist = ['{}_{}_b'.format(odm[face.material_index].name, face.index) for face in bfacelist]
-        sfacelist = sorted([face for face in obj.data.polygons if odm[face.material_index].envi_afsurface == 1 and odm[face.material_index].envi_con_type not in ('Window', 'Door')], key=lambda face: -face.center[2])
+        
+        sfacelist = sorted([face for face, d in faces if d and d.afsurface == 1 and d.con_type not in ('Window', 'Door')], key=lambda face: -face.center[2])
         ssocklist = ['{}_{}_s'.format(odm[face.material_index].name, face.index) for face in sfacelist]
-        ssfacelist = sorted([face for face in obj.data.polygons if odm[face.material_index].envi_afsurface == 1 and odm[face.material_index].envi_con_type in ('Window', 'Door')], key=lambda face: -face.center[2])
+        
+        ssfacelist = sorted([face for face, d in faces if d and d.afsurface == 1 and d.con_type in ('Window', 'Door')], key=lambda face: -face.center[2])
         sssocklist = ['{}_{}_ss'.format(odm[face.material_index].name, face.index) for face in ssfacelist]
 
         [self.outputs.remove(oname) for oname in self.outputs if oname.bl_idname in ('EnViBoundSocket', 'EnViSFlowSocket', 'EnViSSFlowSocket')]
@@ -2784,7 +2798,8 @@ class EnViZone(bpy.types.Node, EnViNodes):
                 uvsocklink(sock, self['nodeid'].split('@')[1])
                 
     def draw_buttons(self, context, layout):
-        newrow(layout, 'Zone:', self, 'zone')
+        layout.prop_search(self, "zone", context.scene, "objects", text="Zone", icon='OBJECT_DATA')
+        # newrow(layout, 'Zone:', self, 'zone')
         yesno = (1, 1, self.control == 'Temperature', self.control == 'Temperature', self.control == 'Temperature')
 #        vals = (("Volume:", "zonevolume"), ("Control type:", "control"), ("Minimum OF:", "mvof"), ("Lower:", "lowerlim"), ("Upper:", "upperlim"))
         vals = (("Control type:", "control"), ("Minimum OF:", "mvof"), ("Lower:", "lowerlim"), ("Upper:", "upperlim"))
@@ -2804,7 +2819,7 @@ class EnViZone(bpy.types.Node, EnViNodes):
 
         paramvs = (self.zone, self.control, tempschedname, mvof, lowerlim, upperlim, '0.0', '300000.0', vaschedname)
         return epentry('AirflowNetwork:MultiZone:Zone', params, paramvs)
-
+        
 class EnViTC(bpy.types.Node, EnViNodes):
     '''Zone Thermal Chimney node'''
     bl_idname = 'EnViTC'
@@ -2815,7 +2830,16 @@ class EnViTC(bpy.types.Node, EnViNodes):
         zonenames= []
         obj = bpy.data.objects[self.zone]
         odm = obj.data.materials
-        bsocklist = ['{}_{}_b'.format(odm[face.material_index].name, face.index)  for face in obj.data.polygons if odm[face.material_index].envi_boundary == 1 and odm[face.material_index].name not in [outp.name for outp in self.outputs if outp.bl_idname == 'EnViBoundSocket']]
+        
+        faces = []
+        for face in obj.data.polygons:
+            md = odm[face.material_index].visuite_envi
+            d = None
+            if len(md) > 0:
+                d = md[0]
+            faces.append((face, d))
+        
+        bsocklist = ['{}_{}_b'.format(odm[face.material_index].name, face.index)  for face, d in faces if d.boundary == 1 and odm[face.material_index].name not in [outp.name for outp in self.outputs if outp.bl_idname == 'EnViBoundSocket']]
 
         for oname in [outputs for outputs in self.outputs if outputs.name not in bsocklist and outputs.bl_idname == 'EnViBoundSocket']:
             self.outputs.remove(oname)
@@ -2829,8 +2853,13 @@ class EnViTC(bpy.types.Node, EnViNodes):
         for sock in (self.inputs[:] + self.outputs[:]):
             if sock.bl_idname == 'EnViBoundSocket' and sock.links:
                 zonenames += [(link.from_node.zone, link.to_node.zone)[sock.is_output] for link in sock.links]
-
-        nodecolour(self, all([mat.envi_con_type != 'Window' for mat in bpy.data.objects[self.zone].data.materials if mat]))
+        
+        
+        nodecolour(
+            self, 
+            all([mat.visuite_envi[0].con_type != 'Window' for mat in bpy.data.objects[self.zone].data.materials 
+                if mat and len(mat.visuite_envi) > 0]))
+        
         self['zonenames'] = zonenames
 
     def supdate(self, context):
@@ -2848,7 +2877,7 @@ class EnViTC(bpy.types.Node, EnViNodes):
         self['zonenames'] = []
 
     def draw_buttons(self, context, layout):
-        newrow(layout, 'Zone:', self, 'zone')
+        layout.prop_search(self, "zone", context.scene, "objects", text="Zone", icon='OBJECT_DATA')
         newrow(layout, 'Schedule:', self, 'sched')
         newrow(layout, 'Width Absorber:', self, 'waw')
         newrow(layout, 'Outlet area:', self, 'ocs')
@@ -2884,8 +2913,14 @@ class EnViTC(bpy.types.Node, EnViNodes):
         for sock in [sock for sock in self.inputs[:] + self.outputs[:] if sock.bl_idname == 'EnViBoundSocket']:
             if sock.links and self.zone in [o.name for o in bpy.data.objects]:
                 zonenames += [link.to_node.zone for link in sock.links]
-                fheights += [max([(bpy.data.objects[self.zone].matrix_world * vert.co)[2] for vert in bpy.data.objects[self.zone].data.vertices]) - (bpy.data.objects[link.to_node.zone].matrix_world * bpy.data.objects[link.to_node.zone].data.polygons[int(link.to_socket.sn)].center)[2] for link in sock.links]
-                fareas += [facearea(bpy.data.objects[link.to_node.zone], bpy.data.objects[link.to_node.zone].data.polygons[int(link.to_socket.sn)]) for link in sock.links]
+                fheights += [max(
+                        [(bpy.data.objects[self.zone].matrix_world * vert.co)[2] 
+                        for vert in bpy.data.objects[self.zone].data.vertices]
+                    ) - (bpy.data.objects[link.to_node.zone].matrix_world * bpy.data.objects[link.to_node.zone].data.polygons[int(link.to_socket.sn)].center)[2]
+                    for link in sock.links]
+                    
+                fareas += [facearea(bpy.data.objects[link.to_node.zone], 
+                    bpy.data.objects[link.to_node.zone].data.polygons[int(link.to_socket.sn)]) for link in sock.links]
     
             self['zonenames'] = zonenames
             for z, zn in enumerate(self['zonenames']):
@@ -2897,14 +2932,32 @@ class EnViTC(bpy.types.Node, EnViNodes):
 
     def epwrite(self):
         scheduled = 1 if self.inputs['Schedule'].links and not self.inputs['Schedule'].links[0].to_node.use_custom_color else 0
-        paramvs = ('{}_TC'.format(self.zone), self.zone, ('', '{}_TCSched'.format(self.zone))[scheduled], self.waw, self.ocs, self.odc)
-        params = ('Name of Thermal Chimney System', 'Name of Thermal Chimney Zone', 'Availability Schedule Name', 'Width of the Absorber Wall',
-                  'Cross Sectional Area of Air Channel Outlet', 'Discharge Coefficient')
+        
+        paramvs = ('{}_TC'.format(self.zone), 
+            self.zone, 
+            ('', '{}_TCSched'.format(self.zone))[scheduled], 
+            self.waw, 
+            self.ocs, 
+            self.odc)
+        
+        params = ('Name of Thermal Chimney System', 
+            'Name of Thermal Chimney Zone', 
+            'Availability Schedule Name', 
+            'Width of the Absorber Wall',
+            'Cross Sectional Area of Air Channel Outlet', 
+            'Discharge Coefficient')
 
         for z, zn in enumerate(self['zonenames']):
-            params += (' Zone Name {}'.format(z + 1), 'Distance from the Top of the Thermal Chimney to Inlet {}'.format(z + 1), 'Relative Ratios of Air Flow Rates Passing through Zone {}'.format(z + 1),
-                       'Cross Sectional Areas of Air Channel Inlet {}'.format(z + 1))
-            paramvs += (zn, self['Distance {}'.format(z)], self['Relative Ratio {}'.format(z)], self['Cross Section {}'.format(z)])
+            
+            params += (' Zone Name {}'.format(z + 1), 
+                'Distance from the Top of the Thermal Chimney to Inlet {}'.format(z + 1), 
+                'Relative Ratios of Air Flow Rates Passing through Zone {}'.format(z + 1),
+                'Cross Sectional Areas of Air Channel Inlet {}'.format(z + 1))
+            
+            paramvs += (zn, 
+                self['Distance {}'.format(z)], 
+                self['Relative Ratio {}'.format(z)], 
+                self['Cross Section {}'.format(z)])
 
         return epentry('ZoneThermalChimney', params, paramvs)
 
@@ -3470,7 +3523,7 @@ class EnViEMSZoneNode(bpy.types.Node, EnViNodes):
         nodecolour(self, 1)
 
     def draw_buttons(self, context, layout):
-        newrow(layout, 'Zone:', self, "emszone")
+        layout.prop_search(self, "emszone", context.scene, "objects", text="Zone", icon='OBJECT_DATA')
         if self.emszone in [o.name for o in bpy.data.objects]:
             newrow(layout, 'Sensor', self, 'sensortype')
         if len(self.inputs) > 1:
